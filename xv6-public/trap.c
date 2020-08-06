@@ -52,24 +52,24 @@ trap(struct trapframe *tf)
     if(cpuid() == 0){
       acquire(&tickslock);
       local_ticks--;
-      if(local_ticks <= 0) {
-      switch(maxlev()){
-	case 2:
-	  local_ticks = 5;
-	  //cprintf("!\n");
-	  break;
-	case 1:
-	  local_ticks = 10;
-	  //cprintf("!!\n");
-	  break;
-	case 0:
-	  local_ticks = 20;
-	  //cprintf("!!!\n");
-	  break;
-	default:
-	  local_ticks = 5;
-	  break;
-      }
+      if(local_ticks < 0) {
+	switch(maxlev()){
+	  case 2:
+	    local_ticks = 4;
+	    //cprintf("!\n");
+	    break;
+	  case 1:
+	    local_ticks = 9;
+	    //cprintf("!!\n");
+	    break;
+	  case 0:
+	    local_ticks = 19;
+	    //cprintf("!!!\n");
+	    break;
+	  default:
+	    local_ticks = 4; // for stride
+	    break;
+	}
       }
       ticks++;
       //cprintf("%d ", local_ticks);

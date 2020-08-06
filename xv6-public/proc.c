@@ -9,10 +9,6 @@
 
 volatile int num_stride;
 volatile int total_share;
-volatile int thread_born;
-
-volatile uint current_thread;
-volatile uint next_thread;
 
 struct {
   struct spinlock lock;
@@ -233,6 +229,9 @@ found:
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
 
+  p->num_thread  = 0; // 0 threads exist
+  p->proc_true = 1;
+
   return p;
 }
 
@@ -349,11 +348,11 @@ fork(void)
   np->share       = 0;
 
   // basic variables for thread
-  np->t_history = 0;
-  np->num_thread  = 0;
+  np->t_history = 0; // no threads made yet
+  //np->num_thread  = 0; // 0 threads exist
   np->active_thread = 0; // this might be confusing but this should be done
-  np->t_chan = -1;
-  np->proc_true = 1;
+  np->t_chan = -1; // sleeping on nothing
+  np->proc_true = 1; // mother proc is running! not thread
 
   //np->pass        = 0;
   //np->stride      = 0;
@@ -584,53 +583,17 @@ scheduler(void)
         // before jumping back to us.
         c->proc = p;
         switchuvm(p);
-        p->state = RUNNING; // Where process becomes RUNNING
-	
-	//swtch(&(c->scheduler), p->context);
+	p->state = RUNNING; // Where process becomes RUNNING
 
-	if(p->num_thread > 0) {
-	  while(local_ticks != 1) {
-	    int temp;
-	    temp = p->active_thread;
-	    while(p->t_state[p->active_thread] != RUNNABLE && p->active_thread < p->t_history) p->active_thread++;
-	    if(p->t_state[p->active_thread] == RUNNABLE) {
-	      if(p->proc_true) p->proc_true = 0;
-	      else p->t_state[temp] = RUNNABLE;
-	      p->t_state[p->active_thread] = RUNNING;
-	      cprintf("to thread %d\n", p->active_thread);
-	      swtch(&(c->scheduler), p->t_context[p->active_thread]);
-	      cprintf("to cpu\n");
-	    } else if(p->active_thread == p->t_history) {
-	      p->active_thread = 0;
-	      if(p->t_chan == -1) {
-		if(!p->proc_true) {
-		  p->proc_true = 1;
-		  p->t_state[p->active_thread] = RUNNABLE;
-		}
-		cprintf("to proc\n");
-		swtch(&(c->scheduler), p->context);
-		cprintf("to cpu\n");
-	      } else {
-		while(p->t_state[p->active_thread] != RUNNABLE && p->active_thread < p->t_history) p->active_thread++;
-		if(p->t_state[p->active_thread] == RUNNABLE) {
-		  if(p->proc_true) p->proc_true = 0;
-		  else p->t_state[temp] = RUNNABLE;
-		  p->t_state[p->active_thread] = RUNNING;
-		  cprintf("to thread %d\n", p->active_thread);
-		  swtch(&(c->scheduler), p->t_context[p->active_thread]);
-		  cprintf("to cpu\n");
-		} else {
-		  panic("thread scheduling gone wrong with double rotation");
-		}
-	      }
-	    } else {
-	      panic("thread scheduling gone wrong");
-	    }
-	  }
-	} else {
-	  swtch(&(c->scheduler), p->context);
+	swtch(&(c->scheduler), p->context);
+
+	if(p->num_thread) {
+	  cli();
+	  cprintf("to proc 0\n");
+	  swtch(&(c->scheduler), p->t_context[0]);
+	  panic("for debug");
 	}
-	
+
 	switchkvm();
 
         p->stampout = stamp();
@@ -704,24 +667,12 @@ sched(void)
     panic("sched ptable.lock");
   if(mycpu()->ncli != 1)
     panic("sched locks");
-  //if(p->state == RUNNING)
-  //  panic("sched running");
+  if(p->state == RUNNING)
+    panic("sched running");
   if(readeflags()&FL_IF)
     panic("sched interruptible");
   intena = mycpu()->intena;
-
-  //swtch(&p->context, mycpu()->scheduler);
-
-  if(p->num_thread > 0) {
-    if(p->proc_true) {
-      swtch(&p->context, mycpu()->scheduler);
-    } else {
-      swtch(&p->t_context[p->active_thread], mycpu()->scheduler);
-    }
-  } else {
-    swtch(&p->context, mycpu()->scheduler);
-  }
-  
+  swtch(&p->context, mycpu()->scheduler);
   mycpu()->intena = intena;
 }
 
@@ -729,7 +680,6 @@ sched(void)
 void
 yield(void)
 {
-  //cprintf("yield\n");
   acquire(&ptable.lock);  //DOC: yieldlock
   myproc()->state = RUNNABLE;
   sched();
@@ -848,13 +798,15 @@ int
 thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
 {
   cli();
+  //cprintf("create %d with %d\n", myproc()->num_thread, (int)arg);
   struct proc *p = myproc();
   uint sz, sp;
   //uint stack[2];
-  uint ustack[5];
+  uint ustack[2];
   char *spk;
   pde_t *pgdir = p->pgdir; // update curproc->pgdir
 
+  /*
   // keep track
   if(p->t_history == 0) {
     sz = PGROUNDUP(p->sz);
@@ -866,9 +818,12 @@ thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
   } else {
     sz = PGROUNDUP(p->t_sz_accumulative);
   }
+  */
+
+  sz = PGROUNDUP(p->sz);
 
   *thread = p->t_history;
-  cprintf("create %d with %d\n", (uint)*thread, (uint)arg); // arg well-fed
+  //cprintf("create %d with %d\n", (uint)*thread, (uint)arg); // arg well-fed
 
   ////////////////
   //
@@ -895,7 +850,13 @@ thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
   p->t_context[p->t_history] = (struct context*)spk;
   memset(p->t_context[p->t_history], 0, sizeof *p->t_context[p->t_history]);
   p->t_context[p->t_history]->eip = (uint)forkret;
- 
+  
+  ////////////////
+  //
+  // THREAD STACK
+  //
+  ////////////////  
+
   // two pages at the page boundary
   if((sz = allocuvm(pgdir, sz, sz + 2*PGSIZE)) == 0) {
     panic("thread stack alloc fail");
@@ -903,12 +864,43 @@ thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
   }
   //cprintf("sz : %d\n", sz);
   clearpteu(pgdir, (char*)(sz - 2*PGSIZE));
+  
+  /*
+  sp = sz;
+  sp -= 4;
+  if(copyout(pgdir, sp, arg, sizeof(uint)) < 0)
+    return -1;
 
-  ////////////////
-  //
-  // THREAD STACK
-  //
-  ////////////////  
+  ustack[3] = sp;
+  ustack[4] = 0;
+  ustack[0] = 0xffffffff;
+  ustack[1] = 0;
+  ustack[2] = sp - 4;
+  sp -= 4 * sizeof(uint);
+  if(copyout(pgdir, sp, ustack, 4 * sizeof(uint)))
+    return -1;
+  */
+
+  sp = sz;
+  sp -= 2*sizeof(uint);
+  ustack[0] = 0xffffffff;
+  ustack[1] = (uint)arg;
+  if(copyout(pgdir, sp, ustack, 2*sizeof(uint)))
+    return -1;
+
+  /*
+  spk = sp;
+  sp -= sizeof *p->t_tf[p->t_history];
+  p->t_tf[p->t_history] = (struct trapframe*)sp;
+  *p->t_tf[p->t_history] = *p->tf;
+
+  sp -= 4;
+  *(uint*)sp = (uint)trapret;
+  sp -= sizeof *p->t_context[p->t_history];
+  p->t_context[p->t_history] = (struct context*)sp;
+  memset(p->t_context[p->t_history], 0, sizeof *p->t_context[p->t_history]);
+  p->t_context[p->t_history]->eip = (uint)forkret;
+  */
 
   /*
   if((p->t_ustack[p->t_history] = kalloc()) == 0){
@@ -928,12 +920,6 @@ thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
   //void *stack = malloc(PGSIZE*2);
 
   //sz = (uint)stack + PGSIZE;
-  sp = sz;
-  ustack[0] = 0xffffffff;
-  ustack[1] = (uint)arg;
-  sp -= 2 * sizeof(uint);
-  if(copyout(pgdir, sp, ustack, 2 * sizeof(uint)))
-    return -1;
 
   //sp = sz;
   //sp = (sp - (strlen(arg) + 1)) & ~3;
@@ -980,9 +966,11 @@ thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
   ////////////////
   
   //curproc->thread_kstack[curproc->thread_history] = sz;
+  //__sync_synchronize();
   //p->t_tf[p->t_history]->eax = 0;
+  
   p->t_tf[p->t_history]->eip = (uint)start_routine;
-  //p->t_tf[p->t_history]->ebp = sp - 4;
+  //p->t_tf[p->t_history]->ebp = sp;
   p->t_tf[p->t_history]->esp = sp;
   //cprintf("SZ : %d, sz : %d , sp : %d\n", p->sz, sz, sp);
   //p->t_first[p->t_history] = 1;
@@ -992,11 +980,12 @@ thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
 
   // total control
   p->t_state[p->t_history] = RUNNABLE;
-  p->t_sz_accumulative = sz; // to count in thread kstack
+  p->sz = sz; // to count in thread kstack
   //p->active_thread = p->t_history;
   p->t_history++;
   p->num_thread++;
 
+  //cprintf("done\n");
   sti();
   return 0; // success
 }

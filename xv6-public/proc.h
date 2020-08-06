@@ -34,6 +34,16 @@ struct context {
 
 enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
+struct node {
+  int val;
+  struct node *link;
+};
+
+struct queue
+{
+  struct node *front, *rear;
+};
+
 // Per-process state
 struct proc {
   uint sz;                     // Size of process memory (bytes)
@@ -73,6 +83,7 @@ struct proc {
   struct trapframe *t_tf[NTHREAD];
   struct context *t_context[NTHREAD];
 
+
   // thread run
   int proc_true; // if it is proc that is running
   int num_thread; // initialized with zero
@@ -81,6 +92,9 @@ struct proc {
 
   // thread's dying message
   void *dyingmessage[NTHREAD];
+
+  // the QUEUE
+  struct queue t_q;
   // Thread //////////////////////////////////////////////////////////////
 };
 
