@@ -980,7 +980,7 @@ thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
 
   // total control
   p->t_state[p->t_history] = RUNNABLE;
-  p->sz = sz; // to count in thread kstack
+  p->sz = sz; // THE SOLUTION
   //p->active_thread = p->t_history;
   p->t_history++;
   p->num_thread++;

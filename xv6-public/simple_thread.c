@@ -31,7 +31,7 @@ main(int argc, char *argv[])
   void *retval;
   gcnt = 0;
   
-  for(i = 3; i < NUM_THREAD; i++){
+  for(i = 2; i < NUM_THREAD; i++){
     if(thread_create(&threads[i], racingthreadmain, (void*)i) != 0) {
       printf(1, "panic at thread_create %d\n", i);
       return -1;
