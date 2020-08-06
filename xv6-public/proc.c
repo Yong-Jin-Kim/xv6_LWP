@@ -589,8 +589,8 @@ scheduler(void)
 
 	if(p->num_thread) {
 	  cli();
-	  cprintf("to proc 0\n");
-	  swtch(&(c->scheduler), p->t_context[0]);
+	  cprintf("to proc %d\n", p->active_thread);
+	  swtch(&(c->scheduler), p->t_context[p->active_thread]);
 	  panic("for debug");
 	}
 
@@ -798,7 +798,7 @@ int
 thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
 {
   cli();
-  //cprintf("create %d with %d\n", myproc()->num_thread, (int)arg);
+  cprintf("create %d with %d\n", myproc()->num_thread, (int)arg);
   struct proc *p = myproc();
   uint sz, sp;
   //uint stack[2];
@@ -981,7 +981,7 @@ thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
   // total control
   p->t_state[p->t_history] = RUNNABLE;
   p->sz = sz; // THE SOLUTION
-  //p->active_thread = p->t_history;
+  p->active_thread = p->t_history;
   p->t_history++;
   p->num_thread++;
 
