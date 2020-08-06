@@ -549,20 +549,22 @@ scheduler(void)
         if(p->mlfqlev != maxlev())
 	  continue;
 
-	/*
 	if(local_ticks == 0) {
         switch(maxlev()){
 	  case 2:
+	    cprintf("2");
 	    // lapic[0x0380/4] = 10000000; FOR MLFQ + STRIDE
 	    // lapic[0x0380/4] = 50000000; // 1 tick set manually
 	    local_ticks = 5;
 	    break;
 	  case 1:
+	    cprintf("1");
 	    // if(num_stride == 0) lapic[0x0380/4] = 20000000; FOR MLFQ + STRIDE
 	    // if(num_stride == 0) lapic[0x0380/4] = 100000000; // 2 tick set manually
 	    local_ticks = 10;
 	    break;
 	  case 0:
+	    cprintf("0");
 	    // if(num_stride == 0) lapic[0x0380/4] = 40000000; FOR MLFQ + STRIDe
 	    // if(num_stride == 0) lapic[0x0380/4] = 200000000; // 4 tick set manually
 	    local_ticks = 20;
@@ -573,7 +575,7 @@ scheduler(void)
 	    local_ticks = 5;
 	    break;
         }
-	}*/
+	}
         // if(ticks % 100 == 0) cprintf("MLFQ\n");
 
         p->stampin = stamp();
@@ -583,15 +585,12 @@ scheduler(void)
         // before jumping back to us.
         c->proc = p;
         switchuvm(p);
+	hot = 0;
 	p->state = RUNNING; // Where process becomes RUNNING
 
-	swtch(&(c->scheduler), p->context);
-
-	if(p->num_thread) {
-	  cli();
-	  cprintf("to proc %d\n", p->active_thread);
-	  swtch(&(c->scheduler), p->t_context[p->active_thread]);
-	  panic("for debug");
+	if(p->num_thread == 0) {
+	  swtch(&(c->scheduler), p->context);
+	} else {
 	}
 
 	switchkvm();

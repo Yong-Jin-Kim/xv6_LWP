@@ -14,6 +14,7 @@ extern uint vectors[];  // in vectors.S: array of 256 entry pointers
 struct spinlock tickslock;
 uint ticks;
 volatile int local_ticks;
+volatile int hot;
 
 void
 tvinit(void)
@@ -52,6 +53,7 @@ trap(struct trapframe *tf)
     if(cpuid() == 0){
       acquire(&tickslock);
       local_ticks--;
+      /*
       if(local_ticks < 0) {
 	switch(maxlev()){
 	  case 2:
@@ -70,9 +72,8 @@ trap(struct trapframe *tf)
 	    local_ticks = 4; // for stride
 	    break;
 	}
-      }
+      }*/
       ticks++;
-      //cprintf("%d ", local_ticks);
       wakeup(&ticks);
       release(&tickslock);
     }
@@ -126,11 +127,27 @@ trap(struct trapframe *tf)
   // If interrupts were on while locks held, would need to check nlock.
   if(myproc() && myproc()->state == RUNNING &&
      tf->trapno == T_IRQ0+IRQ_TIMER) {
-    //if(ticks % 100 == 0) boost(); FOR MLFQ + STRIDE
-    if(ticks % 200 == 0) boost();
+    cprintf("tick : %d\n", ticks);
+    if(ticks % 100 == 0) {
+      cprintf("boost\n");
+      boost();
+    } //FOR MLFQ + STRIDE
     //cprintf("%d ", local_ticks);
     //cprintf("TIME\n");
-    yield();
+    switch(maxlev()) {
+      case 2:
+	if(ticks % 5 == 0) yield();
+	break;
+      case 1:
+	if(ticks % 10 == 0) yield();
+	break;
+      case 0:
+	if(ticks % 20 == 0) yield();
+	break;
+      default:
+	if(ticks % 5 == 0) yield();
+	break;
+    }
   }
 
   // Check if the process has been killed since we yielded
