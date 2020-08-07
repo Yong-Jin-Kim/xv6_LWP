@@ -82,7 +82,7 @@ struct proc {
   // char *t_ustack[NTHREAD]; // no need
   struct trapframe *t_tf[NTHREAD];
   struct context *t_context[NTHREAD];
-
+  uint old_sz;
 
   // thread run
   int proc_true; // if it is proc that is running

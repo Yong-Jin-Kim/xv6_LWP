@@ -549,6 +549,7 @@ scheduler(void)
         if(p->mlfqlev != maxlev())
 	  continue;
 
+	/*
 	if(local_ticks == 0) {
         switch(maxlev()){
 	  case 2:
@@ -578,6 +579,7 @@ scheduler(void)
 	}
         // if(ticks % 100 == 0) cprintf("MLFQ\n");
 
+	*/
         p->stampin = stamp();
 
         // Switch to chosen process.  It is the process's job
@@ -591,6 +593,40 @@ scheduler(void)
 	if(p->num_thread == 0) {
 	  swtch(&(c->scheduler), p->context);
 	} else {
+	  cprintf("there is thread\n");
+	  int temp = p->active_thread;
+	  while(!hot) {
+	    for(; p->t_state[p->active_thread] != RUNNABLE && p->active_thread < p->t_history; p->active_thread++);
+	    if(p->active_thread == p->t_history) {
+	      p->active_thread = 0;
+	      if(p->t_chan == -1) {
+		if(p->proc_true) {
+		} else {
+		  p->proc_true = 1;
+		  p->t_state[temp] = RUNNABLE;
+		}
+		swtch(&(c->scheduler), p->context);
+	      } else {
+		for(; p->t_state[p->active_thread] != RUNNABLE && p->active_thread < p->t_history; p->active_thread++);
+		if(p->t_state[p->active_thread] == RUNNABLE) {
+		  if(p->proc_true) p->proc_true = 0;
+		  else p->t_state[temp] = RUNNABLE;
+		  p->t_state[p->active_thread] = RUNNING;
+		  swtch(&(c->scheduler), p->t_context[p->active_thread]);
+		} else {
+		  panic("logic miss");
+		}
+	      }
+	    } else if(p->t_state[p->active_thread] == RUNNABLE) {
+	      if(p->proc_true) p->proc_true = 0;
+	      else p->t_state[temp] = RUNNABLE;
+	      p->t_state[p->active_thread] = RUNNING;
+	      swtch(&(c->scheduler), p->t_context[p->active_thread]);
+	    } else {
+	      panic("logic miss");
+	    }
+	  }
+
 	}
 
 	switchkvm();
@@ -671,7 +707,14 @@ sched(void)
   if(readeflags()&FL_IF)
     panic("sched interruptible");
   intena = mycpu()->intena;
-  swtch(&p->context, mycpu()->scheduler);
+  if(p->active_thread == 0) {
+    swtch(&p->context, mycpu()->scheduler);
+  } else {
+    if(p->proc_true)
+      swtch(&p->context, mycpu()->scheduler);
+    else
+      swtch(&p->t_context[p->active_thread], mycpu()->scheduler);
+  }
   mycpu()->intena = intena;
 }
 
@@ -818,6 +861,9 @@ thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
     sz = PGROUNDUP(p->t_sz_accumulative);
   }
   */
+
+  if(p->t_history == 0)
+    p->old_sz = p->sz;
 
   sz = PGROUNDUP(p->sz);
 
@@ -969,8 +1015,9 @@ thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
   //p->t_tf[p->t_history]->eax = 0;
   
   p->t_tf[p->t_history]->eip = (uint)start_routine;
-  //p->t_tf[p->t_history]->ebp = sp;
   p->t_tf[p->t_history]->esp = sp;
+  
+  //p->t_tf[p->t_history]->ebp = sp;
   //cprintf("SZ : %d, sz : %d , sp : %d\n", p->sz, sz, sp);
   //p->t_first[p->t_history] = 1;
  
