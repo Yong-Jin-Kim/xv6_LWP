@@ -473,7 +473,8 @@ scheduler(void)
   int passthru;
   int stride_index;
   uint empty_mlfq;
-  local_ticks = 0;
+  //int rotate;
+  //int rotateMAX;
 
   c->proc = 0;
 
@@ -587,15 +588,35 @@ scheduler(void)
         // before jumping back to us.
         c->proc = p;
         switchuvm(p);
-	hot = 0;
 	p->state = RUNNING; // Where process becomes RUNNING
 
+	switch(p->mlfqlev) {
+	  case 2:
+	    local_ticks = 5;
+	    break;
+	  case 1:
+	    local_ticks = 10;
+	    break;
+	  case 0:
+	    local_ticks = 20;
+	    break;
+	  default:
+	    local_ticks = 5;
+	    break;
+	}
+	//rotateMAX = local_ticks;
+
+	//swtch(&(c->scheduler), p->context);
+	// critical section
 	if(p->num_thread == 0) {
+	  //cprintf("to proc\n");
 	  swtch(&(c->scheduler), p->context);
+	  //cprintf("to cpu\n");
 	} else {
-	  cprintf("there is thread\n");
-	  int temp = p->active_thread;
+	  hot = 0;
 	  while(!hot) {
+	    //cprintf("there is thread\n");
+	    int temp = p->active_thread;
 	    for(; p->t_state[p->active_thread] != RUNNABLE && p->active_thread < p->t_history; p->active_thread++);
 	    if(p->active_thread == p->t_history) {
 	      p->active_thread = 0;
@@ -605,14 +626,18 @@ scheduler(void)
 		  p->proc_true = 1;
 		  p->t_state[temp] = RUNNABLE;
 		}
+		//cprintf("to proc\n");
 		swtch(&(c->scheduler), p->context);
+		//cprintf("to cpu\n");
 	      } else {
 		for(; p->t_state[p->active_thread] != RUNNABLE && p->active_thread < p->t_history; p->active_thread++);
 		if(p->t_state[p->active_thread] == RUNNABLE) {
 		  if(p->proc_true) p->proc_true = 0;
 		  else p->t_state[temp] = RUNNABLE;
 		  p->t_state[p->active_thread] = RUNNING;
+		  //cprintf("to thread %d\n", p->active_thread);
 		  swtch(&(c->scheduler), p->t_context[p->active_thread]);
+		  //cprintf("to cpu\n");
 		} else {
 		  panic("logic miss");
 		}
@@ -621,7 +646,9 @@ scheduler(void)
 	      if(p->proc_true) p->proc_true = 0;
 	      else p->t_state[temp] = RUNNABLE;
 	      p->t_state[p->active_thread] = RUNNING;
+	      //cprintf("to thread %d\n", p->active_thread);
 	      swtch(&(c->scheduler), p->t_context[p->active_thread]);
+	      //cprintf("to cpu\n");
 	    } else {
 	      panic("logic miss");
 	    }
@@ -707,6 +734,9 @@ sched(void)
   if(readeflags()&FL_IF)
     panic("sched interruptible");
   intena = mycpu()->intena;
+  
+  swtch(&p->context, mycpu()->scheduler);
+  /*
   if(p->active_thread == 0) {
     swtch(&p->context, mycpu()->scheduler);
   } else {
@@ -715,6 +745,7 @@ sched(void)
     else
       swtch(&p->t_context[p->active_thread], mycpu()->scheduler);
   }
+  */
   mycpu()->intena = intena;
 }
 
@@ -840,7 +871,7 @@ int
 thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
 {
   cli();
-  cprintf("create %d with %d\n", myproc()->num_thread, (int)arg);
+  //cprintf("create %d with %d\n", myproc()->num_thread, (int)arg);
   struct proc *p = myproc();
   uint sz, sp;
   //uint stack[2];
@@ -1046,7 +1077,7 @@ thread_exit(void *retval)
   // in thread
   curproc->dyingmessage[curproc->active_thread] = retval;
   
-  cprintf("exit with retval = %d\n", (int)retval);
+  //cprintf("exit with retval = %d\n", (int)retval);
   
   curproc->t_state[curproc->active_thread] = ZOMBIE;
   if(curproc->t_chan == curproc->active_thread)

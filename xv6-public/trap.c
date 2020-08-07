@@ -52,27 +52,6 @@ trap(struct trapframe *tf)
   case T_IRQ0 + IRQ_TIMER:
     if(cpuid() == 0){
       acquire(&tickslock);
-      //local_ticks--;
-      /*
-      if(local_ticks < 0) {
-	switch(maxlev()){
-	  case 2:
-	    local_ticks = 4;
-	    //cprintf("!\n");
-	    break;
-	  case 1:
-	    local_ticks = 9;
-	    //cprintf("!!\n");
-	    break;
-	  case 0:
-	    local_ticks = 19;
-	    //cprintf("!!!\n");
-	    break;
-	  default:
-	    local_ticks = 4; // for stride
-	    break;
-	}
-      }*/
       ticks++;
       wakeup(&ticks);
       release(&tickslock);
@@ -128,46 +107,19 @@ trap(struct trapframe *tf)
   if(myproc() && myproc()->state == RUNNING &&
      tf->trapno == T_IRQ0+IRQ_TIMER) {
     //cprintf("tick : %d\n", ticks);
-    if(ticks % 100 == 0) {
-      cprintf("boost\n");
+    local_ticks--;
+    //cprintf("local_ticks %d\n", local_ticks);
+    if(ticks % 200 == 0) {
+      //cprintf("boost\n");
       boost();
     } //FOR MLFQ + STRIDE
-    //cprintf("%d ", local_ticks);
     //cprintf("TIME\n");
-    local_ticks--;
-    cprintf("local_ticks : %d\n", local_ticks);
     if(local_ticks <= 0) {
       hot = 1;
-      switch(maxlev()) {
-	case 2:
-	  //if(ticks % 5 == 0) {
-	    local_ticks = 5;
-	    yield();
-	  //}
-	  break;
-	case 1:
-	  //if(ticks % 10 == 0) {
-	    local_ticks = 10;
-	    yield();
-	  //}
-	  break;
-	case 0:
-	  //if(ticks % 20 == 0) {
-	    local_ticks = 20;
-	    yield();
-	  //}
-	  break;
-	default:
-	  //if(ticks % 5 == 0) {
-	    local_ticks = 5;
-	    yield();
-	  //}
-	  break;
-      }
+      yield();
     } else {
-      if(myproc()->num_thread > 0) {
+      if(myproc()->active_thread > 0)
 	yield();
-      }
     }
   }
 
