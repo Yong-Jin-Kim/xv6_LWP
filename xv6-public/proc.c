@@ -590,7 +590,6 @@ scheduler(void)
         switchuvm(p);
 	p->state = RUNNING; // Where process becomes RUNNING
 
-	/*
 	switch(p->mlfqlev) {
 	  case 2:
 	    local_ticks = 5;
@@ -605,7 +604,6 @@ scheduler(void)
 	    local_ticks = 5;
 	    break;
 	}
-	*/
 
 	//rotateMAX = local_ticks;
 
@@ -873,7 +871,7 @@ int
 thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
 {
   cli();
-  //cprintf("create %d with %d\n", myproc()->num_thread, (int)arg);
+  cprintf("create %d with %d\n", myproc()->num_thread, (int)arg);
   struct proc *p = myproc();
   uint sz, sp;
   //uint stack[2];

@@ -50,6 +50,7 @@ trap(struct trapframe *tf)
 
   switch(tf->trapno){
   case T_IRQ0 + IRQ_TIMER:
+    /*
     if(local_ticks <= 0) {
       switch(maxlev()) {
 	case 2:
@@ -66,6 +67,7 @@ trap(struct trapframe *tf)
 	  break;
       }
     }
+    */
     if(cpuid() == 0){
       acquire(&tickslock);
       ticks++;
