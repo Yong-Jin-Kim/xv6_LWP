@@ -733,12 +733,15 @@ sched(void)
   
   //swtch(&p->context, mycpu()->scheduler);
   if(p->active_thread == 0) {
-    swtch(&p->context, mycpu()->scheduler);
+    cprintf("fromP\n");
+    swtch(&(p->context), mycpu()->scheduler);
   } else {
-    if(p->proc_true)
-      swtch(&p->context, mycpu()->scheduler);
+    if(p->proc_true) {
+      cprintf("fromP\n");
+      swtch(&(p->context), mycpu()->scheduler);
+    }
     else
-      swtch(&p->t_context[p->active_thread], mycpu()->scheduler);
+      swtch(&(p->t_context[p->active_thread]), mycpu()->scheduler);
   }
   mycpu()->intena = intena;
 }
