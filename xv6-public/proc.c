@@ -616,8 +616,7 @@ scheduler(void)
 	  swtch(&(c->scheduler), p->context);
 	  //cprintf("to cpu\n");
 	} else {
-	  hot = 0;
-	  while(!hot) {
+	  while(!local_ticks) {
 	    //cprintf("there is thread\n");
 	    int temp = p->active_thread;
 	    for(; p->t_state[p->active_thread] != RUNNABLE && p->active_thread < p->t_history; p->active_thread++);
