@@ -50,7 +50,6 @@ trap(struct trapframe *tf)
 
   switch(tf->trapno){
   case T_IRQ0 + IRQ_TIMER:
-    /*
     if(local_ticks <= 0) {
       switch(maxlev()) {
 	case 2:
@@ -67,7 +66,6 @@ trap(struct trapframe *tf)
 	  break;
       }
     }
-    */
     if(cpuid() == 0){
       acquire(&tickslock);
       ticks++;
@@ -132,7 +130,15 @@ trap(struct trapframe *tf)
       boost();
     } //FOR MLFQ + STRIDE
     //cprintf("TIME\n");
-    if(local_ticks == 0) yield();
+    //yield();
+    if(local_ticks == 0) {
+      yield();
+    } else {
+      if(myproc()->num_thread > 0) {
+	cprintf("yielded to a thread\n");
+	thread_yield();
+      }
+    }
   }
 
   // Check if the process has been killed since we yielded

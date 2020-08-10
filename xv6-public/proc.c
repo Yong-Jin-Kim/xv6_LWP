@@ -590,6 +590,7 @@ scheduler(void)
         switchuvm(p);
 	p->state = RUNNING; // Where process becomes RUNNING
 
+	/*
 	switch(p->mlfqlev) {
 	  case 2:
 	    local_ticks = 5;
@@ -604,18 +605,18 @@ scheduler(void)
 	    local_ticks = 5;
 	    break;
 	}
+	*/
 
 	//rotateMAX = local_ticks;
 
 	//swtch(&(c->scheduler), p->context);
 	// critical section
 	if(p->num_thread == 0) {
-	  //cprintf("to proc\n");
+	  cprintf("to proc\n");
 	  swtch(&(c->scheduler), p->context);
-	  //cprintf("to cpu\n");
 	} else {
-	  while(!local_ticks) {
-	    //cprintf("there is thread\n");
+	  cprintf("there is thread\n");
+	  while(local_ticks > 0) {
 	    int temp = p->active_thread;
 	    for(; p->t_state[p->active_thread] != RUNNABLE && p->active_thread < p->t_history; p->active_thread++);
 	    if(p->active_thread == p->t_history) {
@@ -626,18 +627,15 @@ scheduler(void)
 		  p->proc_true = 1;
 		  p->t_state[temp] = RUNNABLE;
 		}
-		//cprintf("to proc\n");
+		cprintf("to proc\n");
 		swtch(&(c->scheduler), p->context);
-		//cprintf("to cpu\n");
 	      } else {
 		for(; p->t_state[p->active_thread] != RUNNABLE && p->active_thread < p->t_history; p->active_thread++);
 		if(p->t_state[p->active_thread] == RUNNABLE) {
 		  if(p->proc_true) p->proc_true = 0;
 		  else p->t_state[temp] = RUNNABLE;
 		  p->t_state[p->active_thread] = RUNNING;
-		  //cprintf("to thread %d\n", p->active_thread);
 		  swtch(&(c->scheduler), p->t_context[p->active_thread]);
-		  //cprintf("to cpu\n");
 		} else {
 		  panic("logic miss");
 		}
@@ -646,9 +644,7 @@ scheduler(void)
 	      if(p->proc_true) p->proc_true = 0;
 	      else p->t_state[temp] = RUNNABLE;
 	      p->t_state[p->active_thread] = RUNNING;
-	      //cprintf("to thread %d\n", p->active_thread);
 	      swtch(&(c->scheduler), p->t_context[p->active_thread]);
-	      //cprintf("to cpu\n");
 	    } else {
 	      panic("logic miss");
 	    }
@@ -729,14 +725,13 @@ sched(void)
     panic("sched ptable.lock");
   if(mycpu()->ncli != 1)
     panic("sched locks");
-  if(p->state == RUNNING)
+  if(p->state == RUNNING && local_ticks == 0)
     panic("sched running");
   if(readeflags()&FL_IF)
     panic("sched interruptible");
   intena = mycpu()->intena;
   
-  swtch(&p->context, mycpu()->scheduler);
-  /*
+  //swtch(&p->context, mycpu()->scheduler);
   if(p->active_thread == 0) {
     swtch(&p->context, mycpu()->scheduler);
   } else {
@@ -745,7 +740,6 @@ sched(void)
     else
       swtch(&p->t_context[p->active_thread], mycpu()->scheduler);
   }
-  */
   mycpu()->intena = intena;
 }
 
@@ -755,6 +749,14 @@ yield(void)
 {
   acquire(&ptable.lock);  //DOC: yieldlock
   myproc()->state = RUNNABLE;
+  sched();
+  release(&ptable.lock);
+}
+
+void
+thread_yield(void)
+{
+  acquire(&ptable.lock);
   sched();
   release(&ptable.lock);
 }
@@ -871,7 +873,7 @@ int
 thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
 {
   cli();
-  cprintf("create %d with %d\n", myproc()->num_thread, (int)arg);
+  //cprintf("create %d with %d\n", myproc()->num_thread, (int)arg);
   struct proc *p = myproc();
   uint sz, sp;
   //uint stack[2];
@@ -926,7 +928,7 @@ thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
   p->t_context[p->t_history] = (struct context*)spk;
   memset(p->t_context[p->t_history], 0, sizeof *p->t_context[p->t_history]);
   p->t_context[p->t_history]->eip = (uint)forkret;
-  
+ 
   ////////////////
   //
   // THREAD STACK
@@ -1058,7 +1060,7 @@ thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
   // total control
   p->t_state[p->t_history] = RUNNABLE;
   p->sz = sz; // THE SOLUTION
-  p->active_thread = p->t_history;
+  //p->active_thread = p->t_history;
   p->t_history++;
   p->num_thread++;
 
@@ -1109,6 +1111,7 @@ thread_join(thread_t thread, void **retval)
     yield();
   }
 
+  cli();
   // clean up the mess
   curproc->t_state[thread] = UNUSED;
   deallocuvm(curproc->pgdir, PGROUNDUP(curproc->sz) + (thread + 1) * 3 * PGSIZE, PGROUNDUP(curproc->sz) + thread * 3 * PGSIZE);
@@ -1122,6 +1125,7 @@ thread_join(thread_t thread, void **retval)
   // set the value
   cprintf("myproc()->dyingmessage[%d] = %d\n", thread, (uint)myproc()->dyingmessage[thread]);
   *retval = myproc()->dyingmessage[thread];
+  sti();
   return 0;
 }
 
