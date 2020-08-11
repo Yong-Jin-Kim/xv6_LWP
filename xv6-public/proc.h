@@ -92,10 +92,8 @@ struct proc {
 
   // thread's dying message
   void *dyingmessage[NTHREAD];
-
-  // the QUEUE
-  struct queue t_q;
   // Thread //////////////////////////////////////////////////////////////
+
 };
 
 // Process memory is laid out contiguously, low addresses first:

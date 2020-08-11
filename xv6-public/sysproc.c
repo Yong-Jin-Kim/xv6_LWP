@@ -121,6 +121,7 @@ sys_set_cpu_share(void)
 {
   int share;
 
+  cli();
   if(argint(0, &share) < 0)
     return -1;
   if(share <= 0) return -1;
@@ -135,6 +136,7 @@ sys_set_cpu_share(void)
   myproc()->share = share;
   __sync_synchronize();
   set_stride();
+  sti();
   yield();
   return 0;
 }

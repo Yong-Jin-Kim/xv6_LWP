@@ -102,8 +102,6 @@ set_stride(void) {
   total_share = 0;
   num_stride = 0;
 
-  cli();
-
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
     //stride_list[num_stride].pass = 0;
     if(p->is_stride) { // == 1?
@@ -231,7 +229,8 @@ found:
 
   p->num_thread  = 0; // 0 threads exist
   p->proc_true = 1;
-
+  p->t_history = 0; // no threads made yet
+  p->mlfqlev = 2;
   return p;
 }
 
@@ -337,7 +336,6 @@ fork(void)
 
   // proc data -> deal with this
   np->state = RUNNABLE;
-  np->mlfqlev     = 2; // Highest priority if new
   //np->allotment = 50000000; FOR MLFQ + STRIDE
   np->allotment   = 200000000; // Also allotment for highest priority
   np->stampin     = 0;
@@ -348,7 +346,6 @@ fork(void)
   np->share       = 0;
 
   // basic variables for thread
-  np->t_history = 0; // no threads made yet
   //np->num_thread  = 0; // 0 threads exist
   np->active_thread = 0; // this might be confusing but this should be done
   np->t_chan = -1; // sleeping on nothing
@@ -426,7 +423,7 @@ wait(void)
       havekids = 1;
       if(p->state == ZOMBIE){
         // Found one.
-        pid = p->pid;
+	pid = p->pid;
         kfree(p->kstack);
         p->kstack = 0;
         freevm(p->pgdir);
@@ -476,6 +473,7 @@ scheduler(void)
   //int rotate;
   //int rotateMAX;
 
+  local_ticks = 5;
   c->proc = 0;
 
   // Scheduler booting
@@ -536,7 +534,8 @@ scheduler(void)
     if(stride_index == num_stride) { // Last one is MLFQ SET
       // MLFQ PART
       if(num_stride > 0) 
-	empty_mlfq = ticks;
+        empty_mlfq = ticks;
+      // the loop
       for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
         if(p->state != RUNNABLE) {
 	  if(p == &ptable.proc[NPROC]){
@@ -550,37 +549,23 @@ scheduler(void)
         if(p->mlfqlev != maxlev())
 	  continue;
 
-	/*
-	if(local_ticks == 0) {
-        switch(maxlev()){
-	  case 2:
-	    cprintf("2");
-	    // lapic[0x0380/4] = 10000000; FOR MLFQ + STRIDE
-	    // lapic[0x0380/4] = 50000000; // 1 tick set manually
-	    local_ticks = 5;
-	    break;
-	  case 1:
-	    cprintf("1");
-	    // if(num_stride == 0) lapic[0x0380/4] = 20000000; FOR MLFQ + STRIDE
-	    // if(num_stride == 0) lapic[0x0380/4] = 100000000; // 2 tick set manually
-	    local_ticks = 10;
-	    break;
-	  case 0:
-	    cprintf("0");
-	    // if(num_stride == 0) lapic[0x0380/4] = 40000000; FOR MLFQ + STRIDe
-	    // if(num_stride == 0) lapic[0x0380/4] = 200000000; // 4 tick set manually
-	    local_ticks = 20;
-	    break;
-	  default:
-	    // lapic[0x0380/4] = 10000000; FOR MLFQ + STRIDE
-	    // lapic[0x0380/4] = 50000000; // This is when this mlfq is in stride
-	    local_ticks = 5;
-	    break;
-        }
+	if(num_stride == 0) {
+	  switch(maxlev()) {
+	    case 2:
+	      local_ticks = 5;
+	      break;
+	    case 1:
+	      local_ticks = 10;
+	      break;
+	    case 0:
+	      local_ticks = 20;
+	      break;
+	    default:
+	      break;
+	  }
+	} else {
+	  local_ticks = 5;
 	}
-        // if(ticks % 100 == 0) cprintf("MLFQ\n");
-
-	*/
         p->stampin = stamp();
 
         // Switch to chosen process.  It is the process's job
@@ -588,78 +573,16 @@ scheduler(void)
         // before jumping back to us.
         c->proc = p;
         switchuvm(p);
+	
+	// CORE
 	p->state = RUNNING; // Where process becomes RUNNING
-
-	/*
-	switch(p->mlfqlev) {
-	  case 2:
-	    local_ticks = 5;
-	    break;
-	  case 1:
-	    local_ticks = 10;
-	    break;
-	  case 0:
-	    local_ticks = 20;
-	    break;
-	  default:
-	    local_ticks = 5;
-	    break;
-	}
-	*/
-
-	//rotateMAX = local_ticks;
-
-	//swtch(&(c->scheduler), p->context);
-	// critical section
-	if(p->num_thread == 0) {
-	  cprintf("to proc\n");
-	  swtch(&(c->scheduler), p->context);
-	} else {
-	  cprintf("there is thread\n");
-	  while(local_ticks > 0) {
-	    int temp = p->active_thread;
-	    for(; p->t_state[p->active_thread] != RUNNABLE && p->active_thread < p->t_history; p->active_thread++);
-	    if(p->active_thread == p->t_history) {
-	      p->active_thread = 0;
-	      if(p->t_chan == -1) {
-		if(p->proc_true) {
-		} else {
-		  p->proc_true = 1;
-		  p->t_state[temp] = RUNNABLE;
-		}
-		cprintf("to proc\n");
-		swtch(&(c->scheduler), p->context);
-	      } else {
-		for(; p->t_state[p->active_thread] != RUNNABLE && p->active_thread < p->t_history; p->active_thread++);
-		if(p->t_state[p->active_thread] == RUNNABLE) {
-		  if(p->proc_true) p->proc_true = 0;
-		  else p->t_state[temp] = RUNNABLE;
-		  p->t_state[p->active_thread] = RUNNING;
-		  swtch(&(c->scheduler), p->t_context[p->active_thread]);
-		} else {
-		  panic("logic miss");
-		}
-	      }
-	    } else if(p->t_state[p->active_thread] == RUNNABLE) {
-	      if(p->proc_true) p->proc_true = 0;
-	      else p->t_state[temp] = RUNNABLE;
-	      p->t_state[p->active_thread] = RUNNING;
-	      swtch(&(c->scheduler), p->t_context[p->active_thread]);
-	    } else {
-	      panic("logic miss");
-	    }
-	  }
-
-	}
-
+	swtch(&(c->scheduler), p->context);
+	
 	switchkvm();
 
         p->stampout = stamp();
-
         procrun = (p->stampout - p->stampin)/2;
-        
 	if(p->mlfqlev != 0) p->allotment -= procrun; // No need to deal with allotment in level 0
-	
 	if(p->allotment < 0 && p->mlfqlev == 2) {
 	  p->mlfqlev = 1;
 	  //p->allotment = 100000000; FOR MLFQ + STRIDE
@@ -725,24 +648,12 @@ sched(void)
     panic("sched ptable.lock");
   if(mycpu()->ncli != 1)
     panic("sched locks");
-  if(p->state == RUNNING && local_ticks == 0)
+  if(p->state == RUNNING)
     panic("sched running");
   if(readeflags()&FL_IF)
     panic("sched interruptible");
   intena = mycpu()->intena;
-  
-  //swtch(&p->context, mycpu()->scheduler);
-  if(p->active_thread == 0) {
-    cprintf("fromP\n");
-    swtch(&(p->context), mycpu()->scheduler);
-  } else {
-    if(p->proc_true) {
-      cprintf("fromP\n");
-      swtch(&(p->context), mycpu()->scheduler);
-    }
-    else
-      swtch(&(p->t_context[p->active_thread]), mycpu()->scheduler);
-  }
+  swtch(&p->context, mycpu()->scheduler);
   mycpu()->intena = intena;
 }
 
@@ -879,24 +790,10 @@ thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
   //cprintf("create %d with %d\n", myproc()->num_thread, (int)arg);
   struct proc *p = myproc();
   uint sz, sp;
-  //uint stack[2];
   uint ustack[2];
   char *spk;
   pde_t *pgdir = p->pgdir; // update curproc->pgdir
 
-  /*
-  // keep track
-  if(p->t_history == 0) {
-    sz = PGROUNDUP(p->sz);
-
-    // also init thread-related proc variables HERE
-    for(int i = 0; i < NTHREAD; i++){
-      p->t_state[i] = UNUSED;
-    }
-  } else {
-    sz = PGROUNDUP(p->t_sz_accumulative);
-  }
-  */
 
   if(p->t_history == 0)
     p->old_sz = p->sz;
@@ -904,8 +801,7 @@ thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
   sz = PGROUNDUP(p->sz);
 
   *thread = p->t_history;
-  //cprintf("create %d with %d\n", (uint)*thread, (uint)arg); // arg well-fed
-
+  
   ////////////////
   //
   // THREAD KERNEL
@@ -922,11 +818,8 @@ thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
   spk -= sizeof *p->t_tf[p->t_history];
   p->t_tf[p->t_history] = (struct trapframe*)spk;
   *p->t_tf[p->t_history] = *p->tf;
-  //memset(p->t_tf[p->t_history], 0, sizeof *p->t_tf[p->t_history]);
-
   spk -= 4;
   *(uint*)spk = (uint)trapret;
-
   spk -= sizeof *p->t_context[p->t_history];
   p->t_context[p->t_history] = (struct context*)spk;
   memset(p->t_context[p->t_history], 0, sizeof *p->t_context[p->t_history]);
@@ -943,25 +836,8 @@ thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
     panic("thread stack alloc fail");
     return -1; // failed to allocate
   }
-  //cprintf("sz : %d\n", sz);
   clearpteu(pgdir, (char*)(sz - 2*PGSIZE));
   
-  /*
-  sp = sz;
-  sp -= 4;
-  if(copyout(pgdir, sp, arg, sizeof(uint)) < 0)
-    return -1;
-
-  ustack[3] = sp;
-  ustack[4] = 0;
-  ustack[0] = 0xffffffff;
-  ustack[1] = 0;
-  ustack[2] = sp - 4;
-  sp -= 4 * sizeof(uint);
-  if(copyout(pgdir, sp, ustack, 4 * sizeof(uint)))
-    return -1;
-  */
-
   sp = sz;
   sp -= 2*sizeof(uint);
   ustack[0] = 0xffffffff;
@@ -969,105 +845,16 @@ thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
   if(copyout(pgdir, sp, ustack, 2*sizeof(uint)))
     return -1;
 
-  /*
-  spk = sp;
-  sp -= sizeof *p->t_tf[p->t_history];
-  p->t_tf[p->t_history] = (struct trapframe*)sp;
-  *p->t_tf[p->t_history] = *p->tf;
-
-  sp -= 4;
-  *(uint*)sp = (uint)trapret;
-  sp -= sizeof *p->t_context[p->t_history];
-  p->t_context[p->t_history] = (struct context*)sp;
-  memset(p->t_context[p->t_history], 0, sizeof *p->t_context[p->t_history]);
-  p->t_context[p->t_history]->eip = (uint)forkret;
-  */
-
-  /*
-  if((p->t_ustack[p->t_history] = kalloc()) == 0){
-    panic("thread ualloc fail");
-    return -1;
-  }
-
-  spk = p->t_ustack[p->t_history] + KSTACKSIZE;
-
-  spk -= 4;
-  *(uint*)spk = (uint)arg;
-  spk -= 4;
-  *(uint*)spk = 0xffffffff;
-  cprintf("spk : %d\n", (uint)spk);
-  */
-
-  //void *stack = malloc(PGSIZE*2);
-
-  //sz = (uint)stack + PGSIZE;
-
-  //sp = sz;
-  //sp = (sp - (strlen(arg) + 1)) & ~3;
-  //if(copyout(pgdir, sp, arg, strlen(arg) + 1) < 0)
-  //  return -1;
-
-  //ustack[0] = 0xffffffff;
-  //ustack[1] = 0;
-  //ustack[2] = sp - 4;
-  //ustack[3] = sp;
-  //ustack[4] = 0;
-
-  //sp -= 16;
-  //if(copyout(pgdir, sp, ustack, 16) < 0)
-  //  return -1;
-
-  //__sync_synchronize();
-
-  /*
-  sp = sz;
-  sp = (sp - (strlen(arg) + 1)) & ~3;
-  if(copyout(pgdir, sp, arg, strlen(arg) + 1) < 0) {
-    panic("failed to copy values");
-    return -1; // failed to push string to the ustack
-  }
-  stack[3 + 0] = sp;
-  stack[3 + 1] = 0;
-
-  stack[0] = 0xffffffff; // fake return
-  stack[1] = 0; // only one argument
-  stack[2] = sp - (0 + 1) * 4; // arg pointer
-
-  sp -= (3 + 0 + 1) * 4;
-  if(copyout(pgdir, sp, stack, (3 + 0 + 1) * 4) < 0) {
-    panic("failed to copy whole");
-    return -1; // failed to copy ustack to the location
-  }
-  */
-
-  ////////////////
-  //
-  // COMMIT IMAGE
-  //
-  ////////////////
-  
-  //curproc->thread_kstack[curproc->thread_history] = sz;
-  //__sync_synchronize();
-  //p->t_tf[p->t_history]->eax = 0;
   
   p->t_tf[p->t_history]->eip = (uint)start_routine;
   p->t_tf[p->t_history]->esp = sp;
   
-  //p->t_tf[p->t_history]->ebp = sp;
-  //cprintf("SZ : %d, sz : %d , sp : %d\n", p->sz, sz, sp);
-  //p->t_first[p->t_history] = 1;
- 
-  //switchuvm(p);
-  //curproc->thread_awesome[curproc->thread_history] = awesome;
-
-  // total control
   p->t_state[p->t_history] = RUNNABLE;
   p->sz = sz; // THE SOLUTION
   //p->active_thread = p->t_history;
   p->t_history++;
   p->num_thread++;
 
-  //cprintf("done\n");
   sti();
   return 0; // success
 }
@@ -1077,21 +864,18 @@ thread_exit(void *retval)
 {
   cli();
   struct proc *curproc = myproc();
-  //cprintf("                                              exit %d\n", curproc->active_thread);
 
-  // in thread
   curproc->dyingmessage[curproc->active_thread] = retval;
   
-  //cprintf("exit with retval = %d\n", (int)retval);
-  
   curproc->t_state[curproc->active_thread] = ZOMBIE;
-  if(curproc->t_chan == curproc->active_thread)
+  if(curproc->t_chan == curproc->active_thread) {
     curproc->t_chan = -1;
+  }
   //curproc->active_thread++;
   curproc->num_thread--;
   //acquire(&ptable.lock);
   sti();
-  yield();
+  thread_yield();
 }
 
 int
@@ -1102,7 +886,6 @@ thread_join(thread_t thread, void **retval)
 
   // in proc itself, always
   if(thread < 0 || thread > NTHREAD) {
-    cprintf("\n\nOUTOFRANGE\n\n");
     return -1; // out of range
   }
 
@@ -1114,10 +897,11 @@ thread_join(thread_t thread, void **retval)
     yield();
   }
 
+  cprintf("joined\n");
   cli();
   // clean up the mess
   curproc->t_state[thread] = UNUSED;
-  deallocuvm(curproc->pgdir, PGROUNDUP(curproc->sz) + (thread + 1) * 3 * PGSIZE, PGROUNDUP(curproc->sz) + thread * 3 * PGSIZE);
+  deallocuvm(curproc->pgdir, PGROUNDUP(curproc->old_sz) + (thread + 1) * 3 * PGSIZE, PGROUNDUP(curproc->old_sz) + thread * 3 * PGSIZE);
   kfree(curproc->t_kstack[thread]);
   //kfree(curproc->t_ustack[thread]);
 

@@ -50,22 +50,6 @@ trap(struct trapframe *tf)
 
   switch(tf->trapno){
   case T_IRQ0 + IRQ_TIMER:
-    if(local_ticks <= 0) {
-      switch(maxlev()) {
-	case 2:
-	  local_ticks = 5;
-	  break;
-	case 1:
-	  local_ticks = 10;
-	  break;
-	case 0:
-	  local_ticks = 20;
-	  break;
-	default:
-	  local_ticks = 5;
-	  break;
-      }
-    }
     if(cpuid() == 0){
       acquire(&tickslock);
       ticks++;
@@ -73,6 +57,9 @@ trap(struct trapframe *tf)
       wakeup(&ticks);
       release(&tickslock);
     }
+    if(ticks % 200 == 0) {
+      boost();
+    } //FOR MLFQ + STRIDE
     lapiceoi();
     break;
   case T_IRQ0 + IRQ_IDE:
@@ -123,22 +110,9 @@ trap(struct trapframe *tf)
   // If interrupts were on while locks held, would need to check nlock.
   if(myproc() && myproc()->state == RUNNING &&
      tf->trapno == T_IRQ0+IRQ_TIMER) {
-    //cprintf("tick : %d\n", ticks);
-    //cprintf("local_ticks %d\n", local_ticks);
-    if(ticks % 200 == 0) {
-      //cprintf("boost\n");
-      boost();
-    } //FOR MLFQ + STRIDE
-    //cprintf("TIME\n");
-    //yield();
-    if(local_ticks == 0) {
-      yield();
-    } else {
-      if(myproc()->num_thread > 0) {
-	cprintf("yielded to a thread\n");
-	thread_yield();
-      }
-    }
+    
+    if(local_ticks <= 0) yield();
+    //if(local_ticks == 0) yield();
   }
 
   // Check if the process has been killed since we yielded
