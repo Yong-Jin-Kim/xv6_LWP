@@ -53,7 +53,7 @@ trap(struct trapframe *tf)
     if(cpuid() == 0){
       acquire(&tickslock);
       ticks++;
-      local_ticks--;
+      //local_ticks--;
       wakeup(&ticks);
       release(&tickslock);
     }
@@ -111,8 +111,13 @@ trap(struct trapframe *tf)
   if(myproc() && myproc()->state == RUNNING &&
      tf->trapno == T_IRQ0+IRQ_TIMER) {
     
-    if(local_ticks <= 0) yield();
-    //if(local_ticks == 0) yield();
+    //cprintf("change\n");
+    if(local_ticks <= 0) {
+      yield();
+    } else {
+      if(hot)
+	yield();
+    }
   }
 
   // Check if the process has been killed since we yielded

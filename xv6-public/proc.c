@@ -575,8 +575,52 @@ scheduler(void)
         switchuvm(p);
 	
 	// CORE
-	p->state = RUNNING; // Where process becomes RUNNING
-	swtch(&(c->scheduler), p->context);
+	if(p->num_thread == 0) {
+	  hot = 0;
+	  p->state = RUNNING; // Where process becomes RUNNING
+	  swtch(&(c->scheduler), p->context);
+	} else {
+	  ///// ^^
+	  while(local_ticks > 0) {
+	    hot = 1;
+	    int temp = p->active_thread;
+	    for(; p->t_state[p->active_thread] != RUNNABLE && p->active_thread < p->t_history; p->active_thread++);
+	    if(p->t_state[p->active_thread] == RUNNABLE) {
+	      if(p->proc_true) p->proc_true = 0;
+	      else p->t_state[temp] = RUNNABLE;
+	      p->state = RUNNING;
+	      p->t_state[p->active_thread] = RUNNING;
+	      cprintf("into thread %d\n", p->active_thread);
+	      swtch(&(c->scheduler), p->t_context[p->active_thread]);
+	    } else if(p->active_thread == p->t_history) {
+	      p->active_thread = 0;
+	      if(p->t_chan == -1) {
+		if(p->proc_true == 0) {
+		  p->proc_true = 1;
+		  p->t_state[temp] = RUNNABLE;
+		}
+		p->state = RUNNING;
+		cprintf("into proc\n");
+		swtch(&(c->scheduler), p->context);
+	      } else {
+		for(; p->t_state[p->active_thread] != RUNNABLE && p->active_thread < p->t_history; p->active_thread++);
+		if(p->t_state[p->active_thread] == RUNNABLE) {
+		  if(p->proc_true) p->proc_true = 0;
+		  else p->t_state[temp] = RUNNABLE;
+		  p->state = RUNNING;
+		  p->t_state[p->active_thread] = RUNNING;
+		  cprintf("into thread %d\n", p->active_thread);
+		  swtch(&(c->scheduler), p->t_context[p->active_thread]);
+		} else {
+		  panic("thread deadlock");
+		}
+	      }
+	    } else {
+	      panic("thread schedule");
+	    }
+	  }
+	  ///// ^^
+	}
 	
 	switchkvm();
 
@@ -648,12 +692,22 @@ sched(void)
     panic("sched ptable.lock");
   if(mycpu()->ncli != 1)
     panic("sched locks");
-  if(p->state == RUNNING)
+  if(p->state == RUNNING && local_ticks == 0)
     panic("sched running");
   if(readeflags()&FL_IF)
     panic("sched interruptible");
   intena = mycpu()->intena;
-  swtch(&p->context, mycpu()->scheduler);
+  if(p->num_thread == 0) {
+    swtch(&p->context, mycpu()->scheduler);
+  } else {
+    if(p->proc_true) {
+      cprintf("context to proc\n");
+      swtch(&p->context, mycpu()->scheduler);
+    } else {
+      cprintf("context to thread %d\n", p->active_thread);
+      swtch(&p->t_context[p->active_thread], mycpu()->scheduler);
+    }
+  }
   mycpu()->intena = intena;
 }
 
@@ -667,6 +721,7 @@ yield(void)
   release(&ptable.lock);
 }
 
+/*
 void
 thread_yield(void)
 {
@@ -674,6 +729,7 @@ thread_yield(void)
   sched();
   release(&ptable.lock);
 }
+*/
 
 // A fork child's very first scheduling by scheduler()
 // will swtch here.  "Return" to user space.
@@ -787,7 +843,7 @@ int
 thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
 {
   cli();
-  //cprintf("create %d with %d\n", myproc()->num_thread, (int)arg);
+  cprintf("create %d with %d\n", myproc()->t_history, (int)arg);
   struct proc *p = myproc();
   uint sz, sp;
   uint ustack[2];
@@ -795,8 +851,12 @@ thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
   pde_t *pgdir = p->pgdir; // update curproc->pgdir
 
 
-  if(p->t_history == 0)
+  if(p->t_history == 0) {
     p->old_sz = p->sz;
+    for(int i = 0; i < NTHREAD; i++) {
+      p->t_state[i] = UNUSED;
+    }
+  }
 
   sz = PGROUNDUP(p->sz);
 
@@ -818,6 +878,7 @@ thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
   spk -= sizeof *p->t_tf[p->t_history];
   p->t_tf[p->t_history] = (struct trapframe*)spk;
   *p->t_tf[p->t_history] = *p->tf;
+  //memset(p->t_tf[p->t_history], 0, sizeof *p->t_tf[p->t_history]);
   spk -= 4;
   *(uint*)spk = (uint)trapret;
   spk -= sizeof *p->t_context[p->t_history];
@@ -865,6 +926,7 @@ thread_exit(void *retval)
   cli();
   struct proc *curproc = myproc();
 
+  cprintf("                                      exit %d\n", curproc->active_thread);
   curproc->dyingmessage[curproc->active_thread] = retval;
   
   curproc->t_state[curproc->active_thread] = ZOMBIE;
@@ -872,10 +934,10 @@ thread_exit(void *retval)
     curproc->t_chan = -1;
   }
   //curproc->active_thread++;
-  curproc->num_thread--;
+  //curproc->num_thread--;
   //acquire(&ptable.lock);
   sti();
-  thread_yield();
+  yield();
 }
 
 int
@@ -890,20 +952,22 @@ thread_join(thread_t thread, void **retval)
   }
 
   // wait if the thread is not finished
-  while(curproc->t_state[thread] != ZOMBIE)
+  if(curproc->t_state[thread] != ZOMBIE)
   {
     cprintf("join wait %d\n", thread);
     curproc->t_chan = thread;
     yield();
   }
 
-  cprintf("joined\n");
+  cprintf("================joined\n");
   cli();
   // clean up the mess
   curproc->t_state[thread] = UNUSED;
   deallocuvm(curproc->pgdir, PGROUNDUP(curproc->old_sz) + (thread + 1) * 3 * PGSIZE, PGROUNDUP(curproc->old_sz) + thread * 3 * PGSIZE);
   kfree(curproc->t_kstack[thread]);
   //kfree(curproc->t_ustack[thread]);
+
+  curproc->num_thread--;
 
   // for thread stress test
   if(curproc->num_thread == 0)
