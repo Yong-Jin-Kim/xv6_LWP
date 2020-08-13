@@ -349,7 +349,7 @@ fork(void)
   //np->num_thread  = 0; // 0 threads exist
   np->active_thread = 0; // this might be confusing but this should be done
   np->t_chan = -1; // sleeping on nothing
-  np->proc_true = 1; // mother proc is running! not thread
+  //np->proc_true = 1; // mother proc is running! not thread
 
   //np->pass        = 0;
   //np->stride      = 0;
@@ -590,7 +590,7 @@ scheduler(void)
 	      else p->t_state[temp] = RUNNABLE;
 	      p->state = RUNNING;
 	      p->t_state[p->active_thread] = RUNNING;
-	      cprintf("into thread %d\n", p->active_thread);
+	      //cprintf("into thread %d\n", p->active_thread);
 	      swtch(&(c->scheduler), p->t_context[p->active_thread]);
 	    } else if(p->active_thread == p->t_history) {
 	      p->active_thread = 0;
@@ -609,7 +609,7 @@ scheduler(void)
 		  else p->t_state[temp] = RUNNABLE;
 		  p->state = RUNNING;
 		  p->t_state[p->active_thread] = RUNNING;
-		  cprintf("into thread %d\n", p->active_thread);
+		  //cprintf("into thread %d\n", p->active_thread);
 		  swtch(&(c->scheduler), p->t_context[p->active_thread]);
 		} else {
 		  panic("thread deadlock");
@@ -701,10 +701,10 @@ sched(void)
     swtch(&p->context, mycpu()->scheduler);
   } else {
     if(p->proc_true) {
-      cprintf("context to proc\n");
       swtch(&p->context, mycpu()->scheduler);
+      cprintf("back\n");
     } else {
-      cprintf("context to thread %d\n", p->active_thread);
+      //cprintf("context to thread %d\n", p->active_thread);
       swtch(&p->t_context[p->active_thread], mycpu()->scheduler);
     }
   }
@@ -843,7 +843,7 @@ int
 thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
 {
   cli();
-  cprintf("create %d with %d\n", myproc()->t_history, (int)arg);
+  //cprintf("create %d with %d\n", myproc()->t_history, (int)arg);
   struct proc *p = myproc();
   uint sz, sp;
   uint ustack[2];
@@ -926,7 +926,7 @@ thread_exit(void *retval)
   cli();
   struct proc *curproc = myproc();
 
-  cprintf("                                      exit %d\n", curproc->active_thread);
+  //cprintf("                                      exit %d\n", curproc->active_thread);
   curproc->dyingmessage[curproc->active_thread] = retval;
   
   curproc->t_state[curproc->active_thread] = ZOMBIE;
@@ -934,7 +934,7 @@ thread_exit(void *retval)
     curproc->t_chan = -1;
   }
   //curproc->active_thread++;
-  //curproc->num_thread--;
+  curproc->num_thread--;
   //acquire(&ptable.lock);
   sti();
   yield();
@@ -944,6 +944,7 @@ int
 thread_join(thread_t thread, void **retval)
 {
   //cprintf("join called\n");
+  cli();
   struct proc *curproc = myproc();
 
   // in proc itself, always
@@ -952,22 +953,19 @@ thread_join(thread_t thread, void **retval)
   }
 
   // wait if the thread is not finished
-  if(curproc->t_state[thread] != ZOMBIE)
+  while(curproc->t_state[thread] != ZOMBIE)
   {
-    cprintf("join wait %d\n", thread);
+    //cprintf("join wait %d\n", thread);
     curproc->t_chan = thread;
     yield();
   }
 
   cprintf("================joined\n");
-  cli();
   // clean up the mess
   curproc->t_state[thread] = UNUSED;
   deallocuvm(curproc->pgdir, PGROUNDUP(curproc->old_sz) + (thread + 1) * 3 * PGSIZE, PGROUNDUP(curproc->old_sz) + thread * 3 * PGSIZE);
   kfree(curproc->t_kstack[thread]);
   //kfree(curproc->t_ustack[thread]);
-
-  curproc->num_thread--;
 
   // for thread stress test
   if(curproc->num_thread == 0)

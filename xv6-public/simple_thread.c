@@ -37,6 +37,7 @@ main(int argc, char *argv[])
       return -1;
     }
   }
+  //printf(1, "MIDDLE\n");
   for(i = 0; i < NUM_THREAD; i++){
     if(thread_join(threads[i], &retval) != 0 || (int)retval != i+1) {
       printf(1, "panic at thread_join %d with value %d\n", i, (int)retval);
