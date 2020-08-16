@@ -600,7 +600,7 @@ scheduler(void)
 		  p->t_state[temp] = RUNNABLE;
 		}
 		p->state = RUNNING;
-		cprintf("into proc\n");
+		//cprintf("into proc\n");
 		swtch(&(c->scheduler), p->context);
 	      } else {
 		for(; p->t_state[p->active_thread] != RUNNABLE && p->active_thread < p->t_history; p->active_thread++);
@@ -692,7 +692,7 @@ sched(void)
     panic("sched ptable.lock");
   if(mycpu()->ncli != 1)
     panic("sched locks");
-  if(p->state == RUNNING && local_ticks == 0)
+  if(p->state == RUNNING)
     panic("sched running");
   if(readeflags()&FL_IF)
     panic("sched interruptible");
@@ -702,9 +702,7 @@ sched(void)
   } else {
     if(p->proc_true) {
       swtch(&p->context, mycpu()->scheduler);
-      cprintf("back\n");
     } else {
-      //cprintf("context to thread %d\n", p->active_thread);
       swtch(&p->t_context[p->active_thread], mycpu()->scheduler);
     }
   }
@@ -953,14 +951,13 @@ thread_join(thread_t thread, void **retval)
   }
 
   // wait if the thread is not finished
-  while(curproc->t_state[thread] != ZOMBIE)
+  if(curproc->t_state[thread] != ZOMBIE)
   {
     //cprintf("join wait %d\n", thread);
     curproc->t_chan = thread;
     yield();
   }
 
-  cprintf("================joined\n");
   // clean up the mess
   curproc->t_state[thread] = UNUSED;
   deallocuvm(curproc->pgdir, PGROUNDUP(curproc->old_sz) + (thread + 1) * 3 * PGSIZE, PGROUNDUP(curproc->old_sz) + thread * 3 * PGSIZE);

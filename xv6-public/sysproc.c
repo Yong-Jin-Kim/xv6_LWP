@@ -150,6 +150,7 @@ sys_thread_join(void)
     return -1;
   if(argptr(1, (char**)&retval, 4) < 0)
     return -1;
+  cprintf("------------------join %d\n", thread);
   return thread_join(thread, retval);
 }
 
