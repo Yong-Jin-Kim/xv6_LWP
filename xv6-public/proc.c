@@ -549,6 +549,7 @@ scheduler(void)
         if(p->mlfqlev != maxlev())
 	  continue;
 
+	/*
 	if(num_stride == 0) {
 	  switch(maxlev()) {
 	    case 2:
@@ -566,6 +567,7 @@ scheduler(void)
 	} else {
 	  local_ticks = 5;
 	}
+	*/
         p->stampin = stamp();
 
         // Switch to chosen process.  It is the process's job
@@ -577,6 +579,7 @@ scheduler(void)
 	// CORE
 	if(p->num_thread == 0) {
 	  hot = 0;
+	  p->proc_true = 1;
 	  p->state = RUNNING; // Where process becomes RUNNING
 	  swtch(&(c->scheduler), p->context);
 	} else {
@@ -840,7 +843,7 @@ kill(int pid)
 int
 thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
 {
-  cli();
+  pushcli();
   //cprintf("create %d with %d\n", myproc()->t_history, (int)arg);
   struct proc *p = myproc();
   uint sz, sp;
@@ -904,7 +907,8 @@ thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
   if(copyout(pgdir, sp, ustack, 2*sizeof(uint)))
     return -1;
 
-  
+  //p->t_tf[p->t_history]->eax = 0; //  yieldcall
+  //p->t_tf[p->t_history]->trapno = 32; // system call
   p->t_tf[p->t_history]->eip = (uint)start_routine;
   p->t_tf[p->t_history]->esp = sp;
   
@@ -914,14 +918,14 @@ thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
   p->t_history++;
   p->num_thread++;
 
-  sti();
+  popcli();
   return 0; // success
 }
 
 void
 thread_exit(void *retval)
 {
-  cli();
+  pushcli();
   struct proc *curproc = myproc();
 
   //cprintf("                                      exit %d\n", curproc->active_thread);
@@ -932,9 +936,9 @@ thread_exit(void *retval)
     curproc->t_chan = -1;
   }
   //curproc->active_thread++;
-  curproc->num_thread--;
+  //curproc->num_thread--;
   //acquire(&ptable.lock);
-  sti();
+  popcli();
   yield();
 }
 
@@ -942,7 +946,6 @@ int
 thread_join(thread_t thread, void **retval)
 {
   //cprintf("join called\n");
-  cli();
   struct proc *curproc = myproc();
 
   // in proc itself, always
@@ -958,12 +961,14 @@ thread_join(thread_t thread, void **retval)
     yield();
   }
 
+  pushcli();
   // clean up the mess
   curproc->t_state[thread] = UNUSED;
   deallocuvm(curproc->pgdir, PGROUNDUP(curproc->old_sz) + (thread + 1) * 3 * PGSIZE, PGROUNDUP(curproc->old_sz) + thread * 3 * PGSIZE);
   kfree(curproc->t_kstack[thread]);
   //kfree(curproc->t_ustack[thread]);
 
+  curproc->num_thread--;
   // for thread stress test
   if(curproc->num_thread == 0)
     curproc->t_history = 0;
@@ -971,7 +976,7 @@ thread_join(thread_t thread, void **retval)
   // set the value
   cprintf("myproc()->dyingmessage[%d] = %d\n", thread, (uint)myproc()->dyingmessage[thread]);
   *retval = myproc()->dyingmessage[thread];
-  sti();
+  popcli();
   return 0;
 }
 

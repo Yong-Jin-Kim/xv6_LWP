@@ -30,13 +30,3 @@ trapret:
   popl %ds
   addl $0x8, %esp  # trapno and errcode
   iret
-
-.globl threadret
-threadret:
-  popal
-  popl %gs
-  popl %fs
-  popl %es
-  popl %ds
-  popl %esp
-  iret

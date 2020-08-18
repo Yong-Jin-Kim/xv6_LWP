@@ -41,7 +41,11 @@ trap(struct trapframe *tf)
   if(tf->trapno == T_SYSCALL){
     if(myproc()->killed)
       exit();
-    myproc()->tf = tf;
+    if(myproc()->proc_true == 1) {
+      myproc()->tf = tf;
+    } else {
+      myproc()->t_tf[myproc()->active_thread] = tf;
+    }
     syscall();
     if(myproc()->killed)
       exit();
@@ -53,14 +57,30 @@ trap(struct trapframe *tf)
     if(cpuid() == 0){
       acquire(&tickslock);
       ticks++;
+      if(local_ticks <= 0) {
+	switch(maxlev()) {
+	  case 2:
+	    local_ticks = 5;
+	    break;
+	  case 1:
+	    local_ticks = 10;
+	    break;
+	  case 0:
+	    local_ticks = 20;
+	    break;
+	  default:
+	    local_ticks = 5;
+	    break;
+	}
+      }
       local_ticks--;
       wakeup(&ticks);
       release(&tickslock);
     }
-    if(ticks % 200 == 0) {
+    //if(ticks % 200 == 0) {
       //cprintf("boost\n");
-      boost();
-    } //FOR MLFQ + STRIDE
+      //boost();
+    //} //FOR MLFQ + STRIDE
     lapiceoi();
     break;
   case T_IRQ0 + IRQ_IDE:
