@@ -700,15 +700,15 @@ sched(void)
   if(readeflags()&FL_IF)
     panic("sched interruptible");
   intena = mycpu()->intena;
-  if(p->num_thread == 0) {
-    swtch(&p->context, mycpu()->scheduler);
-  } else {
+  //if(p->num_thread == 0) {
+  //  swtch(&p->context, mycpu()->scheduler);
+  //} else {
     if(p->proc_true) {
       swtch(&p->context, mycpu()->scheduler);
     } else {
       swtch(&p->t_context[p->active_thread], mycpu()->scheduler);
     }
-  }
+  //}
   mycpu()->intena = intena;
 }
 
