@@ -13,7 +13,7 @@ racingthreadmain(void *arg)
   int tid = (int) arg;
   int i;
   int tmp;
-  printf(1, "&&&&&@@@@@##### %d\n", (uint)arg);
+  printf(1, "_____ %d\n", (uint)arg);
   for(i = 0; i < 10000; i++) {
     tmp = gcnt;
     tmp++;
