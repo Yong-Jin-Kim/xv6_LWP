@@ -109,7 +109,6 @@ int             pipewrite(struct pipe*, char*, int);
 
 //PAGEBREAK: 16
 // proc.c
-extern volatile int timestamp; // Not sure if used
 extern volatile int num_stride; // 0 if no stride process, 1 if stride process
 extern volatile int total_share; // to make exception possible
 int             cpuid(void);
@@ -142,8 +141,6 @@ int		thread_join(thread_t, void**);
 
 // swtch.S
 void            swtch(struct context**, struct context*);
-void		thread_swtch(struct context**, struct context*);
-void		thread_switch(void);
 
 // spinlock.c
 void            acquire(struct spinlock*);
