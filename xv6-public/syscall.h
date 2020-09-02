@@ -23,18 +23,10 @@
 #define SYS_myfunction 22
 #define SYS_getppid 23
 #define SYS_yield 24
-
 #define SYS_procdump 25
 #define SYS_getlev 26
 #define SYS_set_cpu_share 27
-
-#define SYS_pread 28
-#define SYS_pwrite 29
-#define SYS_sync 30
-#define SYS_get_log_num 31
-
 #define SYS_thread_create 32
 #define SYS_thread_exit 33
 #define SYS_thread_join 34
-
 #define SYS_print_order 35

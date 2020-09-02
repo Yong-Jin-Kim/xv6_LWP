@@ -575,58 +575,8 @@ scheduler(void)
         // before jumping back to us.
         c->proc = p;
         switchuvm(p);
-	
-	// CORE
-	if(p->num_thread == 0) {
-	  hot = 0;
-	  p->proc_true = 1;
-	  p->state = RUNNING; // Where process becomes RUNNING
-	  swtch(&(c->scheduler), p->context);
-	} else {
-	  ///// ^^
-	  while(local_ticks > 0) {
-	    hot = 1;
-	    int temp = p->active_thread;
-	    for(; p->t_state[p->active_thread] != RUNNABLE && p->active_thread < p->t_history; p->active_thread++);
-	    if(p->t_state[p->active_thread] == RUNNABLE) {
-	      if(p->proc_true) p->proc_true = 0;
-	      else p->t_state[temp] = RUNNABLE;
-	      p->state = RUNNING;
-	      p->t_state[p->active_thread] = RUNNING;
-	      //cprintf("into thread %d\n", p->active_thread);
-	      swtch(&(c->scheduler), p->t_context[p->active_thread]);
-	    } else if(p->active_thread == p->t_history) {
-	      p->active_thread = 0;
-	      if(p->t_chan == -1) {
-		if(p->proc_true == 0) {
-		  p->t_state[temp] = RUNNABLE;
-		}
-		p->proc_true = 1;
-		p->state = RUNNING;
-		//cprintf("into proc\n");
-		swtch(&(c->scheduler), p->context);
-	      } else {
-		for(; p->t_state[p->active_thread] != RUNNABLE && p->active_thread < p->t_history; p->active_thread++);
-		if(p->t_state[p->active_thread] == RUNNABLE) {
-		  if(p->proc_true) p->proc_true = 0;
-		  else p->t_state[temp] = RUNNABLE;
-		  p->state = RUNNING;
-		  p->t_state[p->active_thread] = RUNNING;
-		  //cprintf("into thread %d\n", p->active_thread);
-		  swtch(&(c->scheduler), p->t_context[p->active_thread]);
-		} else {
-		  panic("thread deadlock");
-		}
-	      }
-	    } else {
-	      panic("thread schedule");
-	    }
-	  }
-	  ///// ^^
-	}
-	
+	swtch(&(c->scheduler), p->context);
 	switchkvm();
-
         p->stampout = stamp();
         procrun = (p->stampout - p->stampin)/2;
 	if(p->mlfqlev != 0) p->allotment -= procrun; // No need to deal with allotment in level 0
@@ -639,11 +589,8 @@ scheduler(void)
 	  p->mlfqlev = 0;
 	  p->allotment = 0; // An Infinity
         }
-
-        // ULTIMATE DEBUGGER
-        // cprintf("[IN =%d OUT =%d, ELAPSED = %d, LEFT = %d, LEVEL = %d]\n", p->stampin, p->stampout, procrun, p->allotment, p->mlfqlev);
-
-        // Process is done running for now.
+        
+	// Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;
 
@@ -700,15 +647,7 @@ sched(void)
   if(readeflags()&FL_IF)
     panic("sched interruptible");
   intena = mycpu()->intena;
-  //if(p->num_thread == 0) {
-  //  swtch(&p->context, mycpu()->scheduler);
-  //} else {
-    if(p->proc_true) {
-      swtch(&p->context, mycpu()->scheduler);
-    } else {
-      swtch(&p->t_context[p->active_thread], mycpu()->scheduler);
-    }
-  //}
+  swtch(&p->context, mycpu()->scheduler);
   mycpu()->intena = intena;
 }
 
@@ -721,16 +660,6 @@ yield(void)
   sched();
   release(&ptable.lock);
 }
-
-/*
-void
-thread_yield(void)
-{
-  acquire(&ptable.lock);
-  sched();
-  release(&ptable.lock);
-}
-*/
 
 // A fork child's very first scheduling by scheduler()
 // will swtch here.  "Return" to user space.
@@ -819,17 +748,10 @@ int
 kill(int pid)
 {
   struct proc *p;
-  //struct proc *pruning;
-
   acquire(&ptable.lock);
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->pid == pid){
       p->killed = 1;
-      //if(p->is_stride) {
-      //  p->is_stride = 0;
-      //  set_stride();
-      //}
-      // Wake process from sleep if necessary.
       if(p->state == SLEEPING)
         p->state = RUNNABLE;
       release(&ptable.lock);

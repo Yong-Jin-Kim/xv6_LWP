@@ -35,13 +35,7 @@ SYSCALL(yield)
 SYSCALL(procdump)
 SYSCALL(getlev)
 SYSCALL(set_cpu_share)
-SYSCALL(pread)
-SYSCALL(pwrite)
-SYSCALL(sync)
-SYSCALL(get_log_num)
-
 SYSCALL(thread_create)
 SYSCALL(thread_join)
 SYSCALL(thread_exit)
-
 SYSCALL(print_order)

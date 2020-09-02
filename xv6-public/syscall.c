@@ -109,11 +109,9 @@ extern int sys_yield(void);
 extern int sys_procdump(void);
 extern int sys_getlev(void);
 extern int sys_set_cpu_share(void);
-
 extern int sys_thread_create(void);
 extern int sys_thread_join(void);
 extern int sys_thread_exit(void);
-
 extern int sys_print_order(void);
 
 static int (*syscalls[])(void) = {
@@ -144,11 +142,9 @@ static int (*syscalls[])(void) = {
 [SYS_procdump] sys_procdump,
 [SYS_getlev] sys_getlev,
 [SYS_set_cpu_share] sys_set_cpu_share,
-
 [SYS_thread_create] sys_thread_create,
 [SYS_thread_join] sys_thread_join,
 [SYS_thread_exit] sys_thread_exit,
-
 [SYS_print_order] sys_print_order,
 };
 
